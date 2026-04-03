@@ -261,12 +261,12 @@ def plot_pitch_with_shots(df, figsize=(10, 7)):
     """
     fig, ax = plt.subplots(figsize=figsize)
     
-    # Create pitch
-    pitch = Pitch(pitch_type='normalizedyardstogoal', 
+    # Create pitch (opta: 0-100 scale; Understat uses 0-1, so multiply by 100)
+    pitch = Pitch(pitch_type='opta', 
                   pitch_color='#22844e',
                   line_color='white',
                   linewidth=1.5,
-                  half=False)
+                  half=True)
     pitch.draw(ax=ax)
     
     # Separate shots by result
@@ -274,25 +274,31 @@ def plot_pitch_with_shots(df, figsize=(10, 7)):
     shots = df[df['result'] == 'MissedShots']
     saved = df[df['result'] == 'SavedShot']
     blocked = df[df['result'] == 'BlockedShot']
+    post = df[df['result'] == 'ShotOnPost']
     
-    # Plot shots with different colors
+    # Plot shots with different colors (scale Understat 0-1 coords to opta 0-100)
     if len(blocked) > 0:
-        pitch.scatter(blocked['X'], blocked['Y'], s=100, alpha=0.5, 
+        pitch.scatter(blocked['X'] * 100, blocked['Y'] * 100, s=100, alpha=0.5, 
                      color='gray', edgecolors='black', linewidth=0.5, 
                      label='Blocked', ax=ax)
     
     if len(saved) > 0:
-        pitch.scatter(saved['X'], saved['Y'], s=100, alpha=0.6, 
+        pitch.scatter(saved['X'] * 100, saved['Y'] * 100, s=100, alpha=0.6, 
                      color='orange', edgecolors='black', linewidth=0.5, 
                      label='Saved', ax=ax)
     
     if len(shots) > 0:
-        pitch.scatter(shots['X'], shots['Y'], s=100, alpha=0.6, 
+        pitch.scatter(shots['X'] * 100, shots['Y'] * 100, s=100, alpha=0.6, 
                      color='yellow', edgecolors='black', linewidth=0.5, 
                      label='Missed', ax=ax)
     
+    if len(post) > 0:
+        pitch.scatter(post['X'] * 100, post['Y'] * 100, s=120, alpha=0.7, 
+                     color='cyan', edgecolors='black', linewidth=0.5, 
+                     label='Post', ax=ax)
+    
     if len(goals) > 0:
-        pitch.scatter(goals['X'], goals['Y'], s=150, alpha=0.9, 
+        pitch.scatter(goals['X'] * 100, goals['Y'] * 100, s=150, alpha=0.9, 
                      color='red', edgecolors='darkred', linewidth=1.2, 
                      label='Goal', ax=ax, marker='*')
     
@@ -428,7 +434,7 @@ def main():
     # Match filter
     matches = sorted(df['match_id'].unique())
     selected_matches = st.sidebar.multiselect('Match', matches, 
-                                              default=list(matches)[:5])
+                                              default=list(matches))
     
     # Result filter
     results = sorted(df['result'].unique())
