@@ -265,8 +265,8 @@ def plot_pitch_with_shots(df, figsize=(10, 7)):
     pitch = Pitch(pitch_type='normalizedyardstogoal', 
                   pitch_color='#22844e',
                   line_color='white',
-                  linewidth=1.5
-                  half=False
+                  linewidth=1.5,
+                  half=False)
     pitch.draw(ax=ax)
     
     # Separate shots by result
