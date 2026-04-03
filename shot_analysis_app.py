@@ -277,22 +277,22 @@ def plot_pitch_with_shots(df, figsize=(10, 7)):
     
     # Plot shots with different colors
     if len(blocked) > 0:
-        pitch.scatter(blocked['X'], blocked['Y'], s=100, alpha=0.5, 
+        pitch.scatter(blocked['X'] * 105, blocked['Y'] * 68, s=100, alpha=0.5, 
                      color='gray', edgecolors='black', linewidth=0.5, 
                      label='Blocked', ax=ax)
     
     if len(saved) > 0:
-        pitch.scatter(saved['X'], saved['Y'], s=100, alpha=0.6, 
+        pitch.scatter(saved['X'] * 105, saved['Y'] * 68, s=100, alpha=0.6, 
                      color='orange', edgecolors='black', linewidth=0.5, 
                      label='Saved', ax=ax)
     
     if len(shots) > 0:
-        pitch.scatter(shots['X'], shots['Y'], s=100, alpha=0.6, 
+        pitch.scatter(shots['X'] * 105, shots['Y'] * 68, s=100, alpha=0.6, 
                      color='yellow', edgecolors='black', linewidth=0.5, 
                      label='Missed', ax=ax)
     
     if len(goals) > 0:
-        pitch.scatter(goals['X'], goals['Y'], s=150, alpha=0.9, 
+        pitch.scatter(goals['X'] * 105, goals['Y'] * 68, s=150, alpha=0.9, 
                      color='red', edgecolors='darkred', linewidth=1.2, 
                      label='Goal', ax=ax, marker='*')
     
@@ -428,7 +428,7 @@ def main():
     # Match filter
     matches = sorted(df['match_id'].unique())
     selected_matches = st.sidebar.multiselect('Match', matches, 
-                                              default=list(matches)[:5])
+                                              default=list(matches))
     
     # Result filter
     results = sorted(df['result'].unique())
