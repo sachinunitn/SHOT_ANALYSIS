@@ -423,7 +423,7 @@ def main():
     # Team filter
     teams = sorted(set(df['h_team'].unique()) | set(df['a_team'].unique()))
     selected_team = st.sidebar.multiselect('Team', teams, 
-                                           default=[selected_player])
+                                           default=teams)
     
     # Match filter
     matches = sorted(df['match_id'].unique())
