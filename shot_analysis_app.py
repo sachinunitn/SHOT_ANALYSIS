@@ -20,7 +20,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib import cm
 from matplotlib.colors import Normalize
-from mplsoccer import Pitch, create_pitch
+from mplsoccer import Pitch
 import warnings
 
 warnings.filterwarnings('ignore')
