@@ -217,10 +217,9 @@ class MultiPlayerDataProcessor:
         1. Check required columns exist.
         2. Coerce coordinate columns to float.
         3. Remove rows with NULL coordinates, result, or player name.
-        4. Remove outlier coordinates (outside 0–1 range).
+        4. Normalise coordinate scale (handles per-mille and metre-scale).
         5. Standardise result and player-name strings.
         6. Fill optional missing values with sensible defaults.
-        7. Remove duplicate entries.
 
         Parameters
         ----------
@@ -245,51 +244,26 @@ class MultiPlayerDataProcessor:
         for col in ['X', 'Y']:
             df[col] = pd.to_numeric(df[col], errors='coerce')
 
-        # 3. Drop rows with NULL critical values
+        # 3. Drop rows with NULL critical values (only rows that have no coordinates
+        #    or no result — these cannot be analysed at all)
         critical = ['X', 'Y', 'result', 'player']
         before = len(df)
         df = df.dropna(subset=[c for c in critical if c in df.columns])
         self._log(f"Removed {before - len(df)} rows with NULL critical values")
 
-        # 4. Remove outlier/impossible coordinates
-        x_min, x_max = self.val_cfg.get('x_range', (0.0, 1.0))
-        y_min, y_max = self.val_cfg.get('y_range', (0.0, 1.0))
-        before = len(df)
-
-        # Accept coordinates in metres (>1) and normalise them
+        # 4. Normalise coordinate scale
         df = self._handle_coordinate_scale(df)
 
-        mask_valid = (
-            df['X'].between(x_min, x_max) & df['Y'].between(y_min, y_max)
-        )
-        df = df[mask_valid]
-        self._log(f"Removed {before - len(df)} rows with out-of-range coordinates")
-
-        # 5. Standardise result values
-        valid_results = self.val_cfg.get(
-            'valid_results', {'Goal', 'MissedShots', 'SavedShot', 'BlockedShot'}
-        )
-        before = len(df)
-        df = df[df['result'].isin(valid_results)]
-        self._log(f"Removed {before - len(df)} rows with unknown result values")
-
-        # 6. Standardise player / team names
+        # 5. Standardise player / team names
         df['player'] = df['player'].apply(_standardize_name)
         for col in ['h_team', 'a_team']:
             if col in df.columns:
                 df[col] = df[col].apply(_standardize_name)
 
-        # 7. Fill optional missing values
+        # 6. Fill optional missing values
         df = self._fill_optional_missing(df)
 
-        # 8. Remove duplicates (same player, match, X, Y, result, minute)
-        dup_cols = [c for c in ['player', 'match_id', 'X', 'Y', 'result', 'minute']
-                    if c in df.columns]
-        before = len(df)
-        df = df.drop_duplicates(subset=dup_cols)
-        self._log(f"Removed {before - len(df)} duplicate rows")
-
-        # 9. Create is_goal flag
+        # 7. Create is_goal flag
         df['is_goal'] = (df['result'] == 'Goal').astype(int)
 
         removed_total = initial_rows - len(df)
@@ -420,12 +394,6 @@ class MultiPlayerDataProcessor:
             lambda r: _calculate_angle(r['X'], r['Y'], goal_y, pl, pw),
             axis=1,
         )
-
-        # Remove impossible shots
-        max_dist = self.feat_cfg.get('distance', {}).get('max_valid_dist', 80)
-        before = len(df)
-        df = df[df['distance'] <= max_dist]
-        self._log(f"Removed {before - len(df)} rows with distance > {max_dist}m")
 
         # --- Distance & Angle Bins --------------------------------------
         dist_bins = self.dist_cfg.get('bins', [])
