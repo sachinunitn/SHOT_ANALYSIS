@@ -128,37 +128,66 @@ def bin_angle(angle):
 # 2. DATA LOADING & PROCESSING
 # ============================================================================
 
+REQUIRED_COLUMNS = ['result', 'X', 'Y', 'xG', 'player', 'season', 'match_id',
+                    'h_team', 'a_team', 'date']
+
+
 @st.cache_data
 def load_and_process_data(filepath):
     """
     Load Understat CSV and compute distance/angle metrics.
-    
+
+    Supports both comma-separated (single-player) and semicolon-separated
+    (multi-player, multi-season) files.  Rows with unnormalised X/Y values
+    (> 1) are dropped as they represent corrupt coordinates.
+
     Parameters:
     -----------
     filepath : str
         Path to Understat CSV file
-    
+
     Returns:
     --------
     pd.DataFrame
         Processed dataframe with distance, angle, and bin columns
     """
-    df = pd.read_csv(filepath)
-    
+    # Detect separator: shot_data.csv uses ';', legacy files use ','
+    with open(filepath, 'r', encoding='utf-8') as f:
+        first_line = f.readline()
+    sep = ';' if first_line.count(';') > first_line.count(',') else ','
+
+    df = pd.read_csv(filepath, sep=sep)
+
     # Clean column names
     df.columns = df.columns.str.strip()
-    
+
+    # Drop any unnamed index column that may appear as the first column
+    unnamed = [c for c in df.columns if c.startswith('Unnamed')]
+    if unnamed:
+        df = df.drop(columns=unnamed)
+
+    # Validate required columns
+    missing = [c for c in REQUIRED_COLUMNS if c not in df.columns]
+    if missing:
+        raise ValueError(f"Missing required columns: {missing}")
+
+    # Ensure numeric X / Y, then drop rows with invalid (unnormalised) coords
+    df['X'] = pd.to_numeric(df['X'], errors='coerce')
+    df['Y'] = pd.to_numeric(df['Y'], errors='coerce')
+    df = df.dropna(subset=['X', 'Y'])
+    df = df[(df['X'] <= 1) & (df['Y'] <= 1)]
+
     # Map result to binary: 1 if goal, 0 otherwise
     df['is_goal'] = (df['result'] == 'Goal').astype(int)
-    
+
     # Calculate distance and angle
     df['distance'] = df.apply(lambda row: calculate_distance(row['X'], row['Y']), axis=1)
     df['angle'] = df.apply(lambda row: calculate_angle(row['X'], row['Y']), axis=1)
-    
+
     # Bin distance and angle
     df['distance_bin'] = df['distance'].apply(bin_distance)
     df['angle_bin'] = df['angle'].apply(bin_angle)
-    
+
     return df
 
 
@@ -406,55 +435,73 @@ def main():
     
     # Load data
     try:
-        df = load_and_process_data('erling_haaland_2022_understat.csv')
+        df = load_and_process_data('shot_data.csv')
     except FileNotFoundError:
-        st.error("Dataset not found. Please ensure 'erling_haaland_2022_understat.csv' is in the app directory.")
+        st.error("Dataset not found. Please ensure 'shot_data.csv' is in the app directory.")
         return
-    
+    except ValueError as e:
+        st.error(f"Data validation error: {e}")
+        return
+
     # ========================================================================
     # SIDEBAR: FILTERS
     # ========================================================================
     st.sidebar.markdown("## 🎯 Filters")
-    
-    # Player filter
-    players = sorted(df['player'].unique())
-    selected_player = st.sidebar.selectbox('Player', players, index=0)
-    
+
+    # Season filter
+    seasons = sorted(df['season'].unique())
+    selected_seasons = st.sidebar.multiselect('Season', seasons, default=seasons[-1:])
+    if not selected_seasons:
+        selected_seasons = seasons
+
+    # Player filter — dynamically scoped to selected seasons
+    season_df = df[df['season'].isin(selected_seasons)]
+    players = sorted(season_df['player'].unique())
+    selected_players = st.sidebar.multiselect('Player', players, default=players[:1])
+    if not selected_players:
+        selected_players = players
+
     # Team filter
-    teams = sorted(set(df['h_team'].unique()) | set(df['a_team'].unique()))
-    selected_team = st.sidebar.multiselect('Team', teams, 
-                                           default=teams)
-    
+    teams = sorted(set(season_df['h_team'].unique()) | set(season_df['a_team'].unique()))
+    selected_team = st.sidebar.multiselect('Team', teams, default=teams)
+
     # Match filter
-    matches = sorted(df['match_id'].unique())
-    selected_matches = st.sidebar.multiselect('Match', matches, 
-                                              default=list(matches))
-    
+    matches = sorted(season_df['match_id'].unique())
+    selected_matches = st.sidebar.multiselect('Match', matches, default=list(matches))
+
     # Result filter
     results = sorted(df['result'].unique())
-    selected_results = st.sidebar.multiselect('Shot Result', results, 
-                                             default=results)
-    
+    selected_results = st.sidebar.multiselect('Shot Result', results, default=results)
+
     # Apply filters
     filtered_df = df[
-        (df['player'] == selected_player) &
+        (df['season'].isin(selected_seasons)) &
+        (df['player'].isin(selected_players)) &
         ((df['h_team'].isin(selected_team)) | (df['a_team'].isin(selected_team))) &
         (df['match_id'].isin(selected_matches)) &
         (df['result'].isin(selected_results))
     ]
-    
+
     # Display filter summary
+    total_shots = len(filtered_df)
+    total_goals = int(filtered_df['is_goal'].sum())
+    conversion = (total_goals / total_shots * 100) if total_shots > 0 else 0.0
     st.sidebar.markdown(f"""
     ### 📊 Summary
-    - **Shots**: {len(filtered_df)}
-    - **Goals**: {filtered_df['is_goal'].sum()}
-    - **Conversion**: {(filtered_df['is_goal'].sum() / len(filtered_df) * 100):.1f}%
+    - **Players**: {len(selected_players)}
+    - **Shots**: {total_shots}
+    - **Goals**: {total_goals}
+    - **Conversion**: {conversion:.1f}%
     """)
     
     # ========================================================================
     # MAIN CONTENT: 3-COLUMN LAYOUT
     # ========================================================================
-    
+
+    if filtered_df.empty:
+        st.warning("No shots match the current filters. Please adjust your selections.")
+        return
+
     col1, col2, col3 = st.columns([1.2, 1.2, 1.0], gap="medium")
     
     # COLUMN 1: PITCH VISUALIZATION
